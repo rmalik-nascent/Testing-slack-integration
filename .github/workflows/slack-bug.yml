@@ -1,0 +1,24 @@
+name: Slack Bug Reporter
+
+on:
+  repository_dispatch:
+    types: [slack_bug]
+
+jobs:
+  create_issue:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create GitHub Issue
+        uses: peter-evans/create-issue-from-file@v4
+        with:
+          title: "Slack Bug: ${{ github.event.client_payload.message | truncate(50) }}"
+          content: |
+            Reporter: <@${{ github.event.client_payload.user }}>
+            Message: ${{ github.event.client_payload.message }}
+          labels: "bug, slack"
+      - name: Post Slack confirmation
+        if: ${{ secrets.SLACK_WEBHOOK_URL != '' }}
+        run: |
+          curl -X POST -H 'Content-type: application/json' \
+          --data "{\"text\":\"🐞 Issue created: ${{ github.repository_url }}/issues/${{ steps.create_issue.outputs.issue_number }}\"}" \
+          ${{ secrets.SLACK_WEBHOOK_URL }}
