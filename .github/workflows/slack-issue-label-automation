@@ -7,7 +7,7 @@ on:
 jobs:
   automate:
     runs-on: ubuntu-latest
-    if: contains(github.event.issue.body, 'Created via Slack') # only Slack tickets
+    if: contains(github.event.issue.body, 'Reported via Slack workflow') # only Slack tickets
 
     steps:
       # Add label
