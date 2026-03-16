@@ -1,0 +1,35 @@
+name: Slack Issue label Automation
+
+on:
+  issues:
+    types: [opened]
+
+jobs:
+  automate:
+    runs-on: ubuntu-latest
+    if: contains(github.event.issue.body, 'Created via Slack') # only Slack tickets
+
+    steps:
+      # Add label
+      - name: Add label
+        uses: actions-ecosystem/action-add-labels@v1
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          issue_number: ${{ github.event.issue.number }}
+          labels: slack-ticket
+
+      # Assign milestone
+      - name: Assign milestone
+        uses: actions-ecosystem/action-add-milestone@v1
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          issue_number: ${{ github.event.issue.number }}
+          milestone: v8
+
+      # Assign user
+      - name: Assign user
+        uses: actions-ecosystem/action-add-assignees@v1
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          issue_number: ${{ github.event.issue.number }}
+          assignees: rmalik-nascent
