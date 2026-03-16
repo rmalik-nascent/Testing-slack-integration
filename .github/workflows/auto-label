@@ -1,0 +1,14 @@
+name: Auto Label Slack Issues
+
+on:
+  issues:
+    types: [opened]
+
+jobs:
+  label:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Add labels
+        uses: actions-ecosystem/action-add-labels@v1
+        with:
+          labels: slack-ticket
