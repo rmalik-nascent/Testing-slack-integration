@@ -11,4 +11,9 @@ jobs:
       - name: Add labels
         uses: actions-ecosystem/action-add-labels@v1
         with:
-          labels: slack-ticket
+          labels: slack-ticket.
+      - name: Add Milestones
+        uses: actions-ecosystem/action-add-labels@v1
+        with:
+          labels: v8
+
