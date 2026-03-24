@@ -1,0 +1,213 @@
+// ======================
+// CONFIG
+// ======================
+const WEBHOOKS = {
+  humanise: PropertiesService.getScriptProperties().getProperty("WEBHOOK_HUMANISE"),
+  default: PropertiesService.getScriptProperties().getProperty("WEBHOOK_DEFAULT")
+};
+
+const REPO_MAP = {
+  humanise: {owner:"rmalik-nascent", repo: "Testing-slack-integration"},
+  default: {owner:"rmalik-nascent", repo: "Testing-slack-integration"}
+};
+
+const GITHUB_TOKEN = PropertiesService.getScriptProperties().getProperty("GITHUB_TOKEN");
+
+// ======================
+// MAIN PROCESS
+// ======================
+function processRequestEmails() {
+  const labelName = "processed";
+  const processedLabel = GmailApp.getUserLabelByName(labelName) || GmailApp.createLabel(labelName);
+
+  // Only unread emails in inbox are picked
+  const threads = GmailApp.search(`is:unread -label:${labelName}`);
+
+  threads.forEach(thread => {
+    const messages = thread.getMessages().filter(m => m.isUnread());
+
+    messages.forEach(message => {
+      try {
+        const subject = (message.getSubject() || "").trim();
+
+        // Only process emails with "REQUEST" in subject
+        if (!/request/i.test(subject)) return;
+
+        const sender = extractEmail(message.getFrom());
+        const body = message.getPlainBody() || "";
+        const gmailUrl = "https://mail.google.com/mail/u/0/#inbox/" + thread.getId();
+
+        const data = normalizeData(body, subject);
+        const ticketId = "REQ-" + message.getId();
+
+        // Safe fire-and-forget external calls
+        safeSlack(data, ticketId, sender, gmailUrl);
+        safeGitHub(data, ticketId, sender, gmailUrl);
+
+        // Send confirmation
+        sendConfirmation(sender, data.title, ticketId);
+
+        // Mark email as processed AFTER successful handling
+        message.markRead();
+        thread.addLabel(processedLabel);
+
+      } catch (e) {
+        Logger.log("Non-blocking error: " + e);
+      }
+    });
+  });
+}
+
+// ======================
+// DATA NORMALIZATION
+// ======================
+function normalizeData(body, subject) {
+  const clean = (body || "")
+    .replace(/\r/g, "")
+    .replace(/\t/g, " ")
+    .replace(/[^\x20-\x7E\n]/g, "")
+    .replace(/\n{2,}/g, "\n\n")
+    .trim();
+
+  const brandMatch = clean.match(/^\s*brand\s*:\s*(.+)$/im);
+  const brand = brandMatch ? brandMatch[1].trim() : "unknown";
+  const title = extractSubjectTitle(subject);
+
+  return {
+    brand: brand || "unknown",
+    title: title || "No Title",
+    priority: detectPriority(clean),
+    description: buildSafeDescription(clean)
+  };
+}
+
+function buildSafeDescription(body) {
+  return body && body.length > 0 ? body : "No details provided";
+}
+
+function extractSubjectTitle(subject) {
+  const match = subject.match(/request\s*[-:–—]*\s*(.*)/i);
+  return match && match[1] ? match[1].trim() : subject.trim();
+}
+
+function detectPriority(text) {
+  const t = (text || "").toLowerCase();
+  if (t.includes("crash") || t.includes("urgent") || t.includes("asap")) return "High";
+  if (t.includes("low")) return "Low";
+  return "High";
+}
+
+// ======================
+// CLIENT DETECTION
+// ======================
+function detectClient(data, sender) {
+  const brand = (data.brand || "").toLowerCase();
+  if (REPO_MAP[brand]) return brand;
+
+  const domain = sender.split("@")[1]?.toLowerCase();
+  if (domain) {
+    const key = domain.split(".")[0];
+    if (REPO_MAP[key]) return key;
+  }
+  return "default";
+}
+
+// ======================
+// SLACK
+// ======================
+function safeSlack(data, ticketId, sender, gmailUrl) {
+  try {
+    const clientKey = detectClient(data, sender);
+    const webhookUrl = WEBHOOKS[clientKey] || WEBHOOKS.default;
+
+    UrlFetchApp.fetch(webhookUrl, {
+      method: "post",
+      contentType: "application/json",
+      payload: JSON.stringify({
+        text: `<@U095NKE0JLV>🆕 New Request\n\nTicket: ${ticketId}\nTitle: ${data.title}\nBrand: ${data.brand}\nPriority: ${data.priority}\nFrom: ${sender}\n\n${data.description}\n\nOriginal Email:\n${gmailUrl}`
+      }),
+      muteHttpExceptions: true
+    });
+  } catch (e) {
+    Logger.log("Slack error: " + e);
+  }
+}
+
+// ======================
+// GITHUB
+// ======================
+function safeGitHub(data, ticketId, sender, gmailUrl) {
+  try {
+    const clientKey = detectClient(data, sender);
+    const repo = REPO_MAP[clientKey];
+
+    // Validate repo mapping exists
+    if (!repo || !repo.owner || !repo.repo) {
+      Logger.log(`GitHub repo not defined for client: ${clientKey}`);
+      return;
+    }
+
+    // Construct payload
+    const payload = {
+      title: `[${ticketId}] ${data.title || "No Title"}`,
+      body: `Ticket: ${ticketId}
+      Client: ${clientKey}
+      From: ${sender}
+      Brand: ${data.brand || "unknown"}
+      Priority: ${data.priority || "Medium"}
+
+      ${data.description || "No details provided"}
+
+      Original Email:${gmailUrl}`
+    };
+
+    // Call GitHub API safely
+    const response = UrlFetchApp.fetch(
+      `https://api.github.com/repos/${repo.owner}/${repo.repo}/issues`,
+      {
+        method: "post",
+        contentType: "application/json",
+        headers: {
+          Authorization: "Bearer " + GITHUB_TOKEN,
+          "Accept": "application/vnd.github+json"
+        },
+        payload: JSON.stringify(payload),
+        muteHttpExceptions: true
+      }
+    );
+
+    // Log the response for debugging
+    Logger.log(`GitHub response code: ${response.getResponseCode()}`);
+    Logger.log(`GitHub response body: ${response.getContentText()}`);
+
+    if (response.getResponseCode() < 200 || response.getResponseCode() >= 300) {
+      Logger.log(`GitHub issue creation failed for ticket ${ticketId}`);
+    }
+
+  } catch (e) {
+    Logger.log("GitHub error: " + e);
+  }
+}
+
+// ======================
+// CONFIRMATION EMAIL
+// ======================
+function sendConfirmation(email, title, ticketId) {
+  try {
+    GmailApp.sendEmail(
+      email,
+      "Request Received",
+      `Hi,\n\nYour request has been received.\n\nTicket ID: ${ticketId}\nTitle: ${title}\n\nWe will get back to you soon.\n\nThanks!`
+    );
+  } catch (e) {
+    Logger.log("Email error: " + e);
+  }
+}
+
+// ======================
+// UTILS
+// ======================
+function extractEmail(sender) {
+  const match = sender.match(/<(.+)>/);
+  return match ? match[1] : sender;
+}
