@@ -210,17 +210,30 @@ function sendConfirmation(email, title, ticketId, attachments = []) {
     GmailApp.sendEmail(
       email,
       "Request Received",
-      `Hi,
+      "Your email client does not support HTML.", // fallback (plain text)
+      {
+        htmlBody: `
+          <p>Hi,</p>
 
-Your request has been received.
+          <p>Your request has been received.</p>
 
-Ticket ID: ${ticketId}
-Title: ${title}
+          <p><strong>Ticket ID:</strong> ${ticketId}<br>
+          <strong>Title:</strong> ${title}</p>
 
-We will get back to you soon.
+          <p>
+          If this is a new request, please fill out the 
+          <a href="https://docs.google.com/forms/d/e/1FAIpQLSdUY6H-LcXDSTpAmwBz3zo-YsBeqWHmPWeAlvREwgsm1Qvrkw/viewform?usp=sharing&ouid=105082127515900957965">
+          form
+          </a> 
+          to ensure a timely response.
+          </p>
 
-Thanks!`,
-      { attachments: attachments }
+          <p>We will get back to you soon.</p>
+
+          <p>Thanks!</p>
+        `,
+        attachments: attachments
+      }
     );
   } catch (e) {
     Logger.log("Email error: " + e);
