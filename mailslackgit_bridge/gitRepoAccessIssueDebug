@@ -1,0 +1,65 @@
+// function githubOrgAccessTest() {
+
+//   const url = "https://api.github.com/user";
+//    const GITHUB_TOKEN = "";
+
+//   const response = UrlFetchApp.fetch(url, {
+//     method: "get",
+//     headers: {
+//       Authorization: "Bearer " + GITHUB_TOKEN,
+//       Accept: "application/vnd.github+json",
+//       "X-GitHub-Api-Version": "2022-11-28"
+//     },
+//     muteHttpExceptions: true
+//   });
+
+//   Logger.log("STATUS: " + response.getResponseCode());
+//   Logger.log(response.getContentText());
+// }
+
+// function testGithubRepoAccess() {
+//   const token = '';
+//   const owner = 'nascentdigital';
+//   const repo = 'humanise';
+
+//   const url = `https://api.github.com/repos/${owner}/${repo}`;
+
+//   const response = UrlFetchApp.fetch(url, {
+//     method: 'get',
+//     headers: {
+//       Authorization: `Bearer ${token}`,
+//       Accept: 'application/vnd.github+json'
+//     },
+//     muteHttpExceptions: true
+//   });
+
+//   Logger.log('STATUS: ' + response.getResponseCode());
+//   Logger.log(response.getContentText());
+// }
+
+function testCreateIssue() {
+   const token = '';
+   const owner = 'nascentdigital';
+   const repo = 'humanise';
+
+  const url = `https://api.github.com/repos/${owner}/${repo}/issues`;
+
+  const payload = {
+    title: 'Test Issue from Apps Script',
+    body: 'Testing GitHub issue creation'
+  };
+
+  const response = UrlFetchApp.fetch(url, {
+    method: 'post',
+    contentType: 'application/json',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      Accept: 'application/vnd.github+json'
+    },
+    payload: JSON.stringify(payload),
+    muteHttpExceptions: true
+  });
+
+  Logger.log('STATUS: ' + response.getResponseCode());
+  Logger.log(response.getContentText());
+}
